@@ -22,6 +22,7 @@ pub enum DieReference {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationType {
     /// The generic type, which is address-sized and of unspecified sign.
+    /// This type is also used to represent address base types.
     Generic,
     // Boolean,
     // S8,
