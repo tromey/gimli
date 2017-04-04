@@ -99,6 +99,11 @@ pub enum Error {
     InvalidExpressionTerminator(usize),
     /// Division or modulus by zero when evaluating an expression.
     DivisionByZero,
+    /// An expression operation used mismatching types.
+    TypeMismatch,
+    /// An expression operation required an integral type but saw a
+    /// floating point type.
+    IntegralTypeRequired,
     /// An unknown DW_CFA_* instruction.
     UnknownCallFrameInstruction(constants::DwCfa),
     /// The end of an address range was before the beginning.
@@ -212,6 +217,8 @@ impl error::Error for Error {
             }
             Error::InvalidExpressionTerminator(_) => "Expected DW_OP_piece or DW_OP_bit_piece",
             Error::DivisionByZero => "Division or modulus by zero when evaluating expression",
+            Error::TypeMismatch => "Type mismatch when evaluating expression",
+            Error::IntegralTypeRequired => "Integral type expected when evaluating expression",
             Error::UnknownCallFrameInstruction(_) => "An unknown DW_CFA_* instructiion",
             Error::InvalidAddressRange => {
                 "The end of an address range must not be before the beginning."

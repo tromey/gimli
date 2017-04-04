@@ -18,6 +18,44 @@ pub enum DieReference {
     DebugInfoRef(DebugInfoOffset),
 }
 
+/// The type of an entry on the DWARF stack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationType {
+    /// The generic type, which is address-sized and of unspecified
+    /// sign.
+    Generic,
+    // Boolean,
+    // S8,
+    // U8,
+    // S16,
+    // U16,
+    // S32,
+    // U32,
+    // S64,
+    // U64,
+    // Address,
+    // F32,
+    // F64
+}
+
+// fn operation_type_size(ot: OperationType) -> u8 {
+//     match ot {
+//         Generic => FIXME,
+//         Boolean => 1,
+//         S8 => 1,
+//         U8 => 1,
+//         S16 => 2,
+//         U16 => 2,
+//         S32 => 4,
+//         U32 => 4,
+//         S64 => 8,
+//         U64 => 8,
+//         Address => FIXME,
+//         F32 => 4,
+//         F64 => 8,
+//     }
+// }
+
 /// A single decoded DWARF expression operation.
 ///
 /// DWARF expression evaluation is done in two parts: first the raw
@@ -115,6 +153,8 @@ pub enum Operation<'input, Endian>
     /// Push a constant value on the stack.  This handles multiple
     /// DWARF opcodes, including `DW_OP_addr`.
     Literal {
+        /// The type of the value.
+        value_type: OperationType,
         /// The value to push.
         value: u64,
     },
@@ -308,7 +348,7 @@ impl<'input, Endian> Operation<'input, Endian>
         match name {
             constants::DW_OP_addr => {
                 let (newbytes, value) = try!(parse_address(bytes, address_size));
-                Ok((newbytes, Operation::Literal { value: value }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value }))
             }
             constants::DW_OP_deref => {
                 Ok((bytes,
@@ -319,43 +359,43 @@ impl<'input, Endian> Operation<'input, Endian>
             }
             constants::DW_OP_const1u => {
                 let (newbytes, value) = try!(parse_u8e(bytes));
-                Ok((newbytes, Operation::Literal { value: value as u64 }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value as u64 }))
             }
             constants::DW_OP_const1s => {
                 let (newbytes, value) = try!(parse_i8e(bytes));
-                Ok((newbytes, Operation::Literal { value: value as u64 }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value as u64 }))
             }
             constants::DW_OP_const2u => {
                 let (newbytes, value) = try!(parse_u16(bytes));
-                Ok((newbytes, Operation::Literal { value: value as u64 }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value as u64 }))
             }
             constants::DW_OP_const2s => {
                 let (newbytes, value) = try!(parse_i16(bytes));
-                Ok((newbytes, Operation::Literal { value: value as u64 }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value as u64 }))
             }
             constants::DW_OP_const4u => {
                 let (newbytes, value) = try!(parse_u32(bytes));
-                Ok((newbytes, Operation::Literal { value: value as u64 }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value as u64 }))
             }
             constants::DW_OP_const4s => {
                 let (newbytes, value) = try!(parse_i32(bytes));
-                Ok((newbytes, Operation::Literal { value: value as u64 }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value as u64 }))
             }
             constants::DW_OP_const8u => {
                 let (newbytes, value) = try!(parse_u64(bytes));
-                Ok((newbytes, Operation::Literal { value: value }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value }))
             }
             constants::DW_OP_const8s => {
                 let (newbytes, value) = try!(parse_i64(bytes));
-                Ok((newbytes, Operation::Literal { value: value as u64 }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value as u64 }))
             }
             constants::DW_OP_constu => {
                 let (newbytes, value) = try!(parse_unsigned_lebe(bytes));
-                Ok((newbytes, Operation::Literal { value: value }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value }))
             }
             constants::DW_OP_consts => {
                 let (newbytes, value) = try!(parse_signed_lebe(bytes));
-                Ok((newbytes, Operation::Literal { value: value as u64 }))
+                Ok((newbytes, Operation::Literal { value_type: OperationType::Generic, value: value as u64 }))
             }
             constants::DW_OP_dup => Ok((bytes, Operation::Pick { index: 0 })),
             constants::DW_OP_drop => Ok((bytes, Operation::Drop)),
@@ -407,38 +447,38 @@ impl<'input, Endian> Operation<'input, Endian>
                 Ok((newbytes,
                     Operation::Skip { target: try!(compute_pc(newbytes, bytecode, value)) }))
             }
-            constants::DW_OP_lit0 => Ok((bytes, Operation::Literal { value: 0 })),
-            constants::DW_OP_lit1 => Ok((bytes, Operation::Literal { value: 1 })),
-            constants::DW_OP_lit2 => Ok((bytes, Operation::Literal { value: 2 })),
-            constants::DW_OP_lit3 => Ok((bytes, Operation::Literal { value: 3 })),
-            constants::DW_OP_lit4 => Ok((bytes, Operation::Literal { value: 4 })),
-            constants::DW_OP_lit5 => Ok((bytes, Operation::Literal { value: 5 })),
-            constants::DW_OP_lit6 => Ok((bytes, Operation::Literal { value: 6 })),
-            constants::DW_OP_lit7 => Ok((bytes, Operation::Literal { value: 7 })),
-            constants::DW_OP_lit8 => Ok((bytes, Operation::Literal { value: 8 })),
-            constants::DW_OP_lit9 => Ok((bytes, Operation::Literal { value: 9 })),
-            constants::DW_OP_lit10 => Ok((bytes, Operation::Literal { value: 10 })),
-            constants::DW_OP_lit11 => Ok((bytes, Operation::Literal { value: 11 })),
-            constants::DW_OP_lit12 => Ok((bytes, Operation::Literal { value: 12 })),
-            constants::DW_OP_lit13 => Ok((bytes, Operation::Literal { value: 13 })),
-            constants::DW_OP_lit14 => Ok((bytes, Operation::Literal { value: 14 })),
-            constants::DW_OP_lit15 => Ok((bytes, Operation::Literal { value: 15 })),
-            constants::DW_OP_lit16 => Ok((bytes, Operation::Literal { value: 16 })),
-            constants::DW_OP_lit17 => Ok((bytes, Operation::Literal { value: 17 })),
-            constants::DW_OP_lit18 => Ok((bytes, Operation::Literal { value: 18 })),
-            constants::DW_OP_lit19 => Ok((bytes, Operation::Literal { value: 19 })),
-            constants::DW_OP_lit20 => Ok((bytes, Operation::Literal { value: 20 })),
-            constants::DW_OP_lit21 => Ok((bytes, Operation::Literal { value: 21 })),
-            constants::DW_OP_lit22 => Ok((bytes, Operation::Literal { value: 22 })),
-            constants::DW_OP_lit23 => Ok((bytes, Operation::Literal { value: 23 })),
-            constants::DW_OP_lit24 => Ok((bytes, Operation::Literal { value: 24 })),
-            constants::DW_OP_lit25 => Ok((bytes, Operation::Literal { value: 25 })),
-            constants::DW_OP_lit26 => Ok((bytes, Operation::Literal { value: 26 })),
-            constants::DW_OP_lit27 => Ok((bytes, Operation::Literal { value: 27 })),
-            constants::DW_OP_lit28 => Ok((bytes, Operation::Literal { value: 28 })),
-            constants::DW_OP_lit29 => Ok((bytes, Operation::Literal { value: 29 })),
-            constants::DW_OP_lit30 => Ok((bytes, Operation::Literal { value: 30 })),
-            constants::DW_OP_lit31 => Ok((bytes, Operation::Literal { value: 31 })),
+            constants::DW_OP_lit0 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 0 })),
+            constants::DW_OP_lit1 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 1 })),
+            constants::DW_OP_lit2 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 2 })),
+            constants::DW_OP_lit3 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 3 })),
+            constants::DW_OP_lit4 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 4 })),
+            constants::DW_OP_lit5 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 5 })),
+            constants::DW_OP_lit6 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 6 })),
+            constants::DW_OP_lit7 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 7 })),
+            constants::DW_OP_lit8 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 8 })),
+            constants::DW_OP_lit9 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 9 })),
+            constants::DW_OP_lit10 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 10 })),
+            constants::DW_OP_lit11 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 11 })),
+            constants::DW_OP_lit12 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 12 })),
+            constants::DW_OP_lit13 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 13 })),
+            constants::DW_OP_lit14 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 14 })),
+            constants::DW_OP_lit15 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 15 })),
+            constants::DW_OP_lit16 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 16 })),
+            constants::DW_OP_lit17 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 17 })),
+            constants::DW_OP_lit18 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 18 })),
+            constants::DW_OP_lit19 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 19 })),
+            constants::DW_OP_lit20 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 20 })),
+            constants::DW_OP_lit21 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 21 })),
+            constants::DW_OP_lit22 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 22 })),
+            constants::DW_OP_lit23 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 23 })),
+            constants::DW_OP_lit24 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 24 })),
+            constants::DW_OP_lit25 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 25 })),
+            constants::DW_OP_lit26 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 26 })),
+            constants::DW_OP_lit27 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 27 })),
+            constants::DW_OP_lit28 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 28 })),
+            constants::DW_OP_lit29 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 29 })),
+            constants::DW_OP_lit30 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 30 })),
+            constants::DW_OP_lit31 => Ok((bytes, Operation::Literal { value_type: OperationType::Generic, value: 31 })),
             constants::DW_OP_reg0 => Ok((bytes, Operation::Register { register: 0 })),
             constants::DW_OP_reg1 => Ok((bytes, Operation::Register { register: 1 })),
             constants::DW_OP_reg2 => Ok((bytes, Operation::Register { register: 2 })),
@@ -885,6 +925,315 @@ pub enum EvaluationResult<'input, Endian>
     RequiresEntryValue(EndianBuf<'input, Endian>),
 }
 
+#[derive(Debug, Clone, Copy)]
+struct StackEntry {
+    value_type: OperationType,
+    value: u64,
+}
+
+impl StackEntry {
+    fn signed(&self, address_size: u8, addr_mask: u64) -> i64 {
+        let value = self.value & addr_mask;
+        if address_size < 8 && (value & (1u64 << (8 * address_size - 1))) != 0 {
+            // Sign extend.
+            (value | !addr_mask) as i64
+        } else {
+            value as i64
+        }
+    }
+
+    fn signed_integer(&self, address_size: u8, addr_mask: u64) -> Result<i64, Error> {
+        if self.value_type != OperationType::Generic {
+            Err(Error::IntegralTypeRequired)
+        } else {
+            Ok(self.signed(address_size, addr_mask))
+        }
+    }
+
+    fn unsigned_integer(&self, addr_mask: u64) -> Result<u64, Error> {
+        // FIXME.
+        if self.value_type != OperationType::Generic {
+            Err(Error::IntegralTypeRequired)
+        } else {
+            Ok(self.value & addr_mask)
+        }
+    }
+
+    fn abs(&self, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        match self.value_type {
+            OperationType::Generic => {
+                let v = self.signed(address_size, addr_mask);
+                Ok(StackEntry{value_type: OperationType::Generic, value: v.abs() as u64})
+            }
+        }
+    }
+
+    fn and(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            Ok(StackEntry{value_type: self.value_type, value: v1 & v2})
+        }
+    }
+
+    fn div(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.signed(address_size, addr_mask);
+                    if v1 == 0 {
+                        Err(Error::DivisionByZero.into())
+                    } else {
+                        let v2 = x.signed(address_size, addr_mask);
+                        Ok(StackEntry{value_type: OperationType::Generic, value: v2.wrapping_div(v1) as u64})
+                    }
+                }
+            }
+        }
+    }
+
+    fn sub(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.value & addr_mask;
+                    let v2 = x.value & addr_mask;
+                    Ok(StackEntry{value_type: OperationType::Generic, value: v2.wrapping_sub(v1)})
+                }
+            }
+        }
+    }
+
+    fn rem(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.value & addr_mask;
+                    let v2 = x.value & addr_mask;
+                    if v1 == 0 {
+                        Err(Error::DivisionByZero.into())
+                    } else {
+                        Ok(StackEntry{value_type: OperationType::Generic, value: v2.wrapping_rem(v1)})
+                    }
+                }
+            }
+        }
+    }
+
+    fn mul(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.value & addr_mask;
+                    let v2 = x.value & addr_mask;
+                    if v1 == 0 {
+                        Err(Error::DivisionByZero.into())
+                    } else {
+                        Ok(StackEntry{value_type: OperationType::Generic, value: v2.wrapping_mul(v1)})
+                    }
+                }
+            }
+        }
+    }
+
+    fn neg(&self, addr_mask: u64) -> Result<StackEntry, Error> {
+        match self.value_type {
+            OperationType::Generic => {
+                let v = self.value & addr_mask;
+                Ok(StackEntry{value_type: OperationType::Generic, value: v.wrapping_neg()})
+            }
+        }
+    }
+
+    fn not(&self, addr_mask: u64) -> Result<StackEntry, Error> {
+        let v = try!(self.unsigned_integer(addr_mask));
+        Ok(StackEntry{value_type: self.value_type, value: !v})
+    }
+
+    fn or(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            Ok(StackEntry{value_type: self.value_type, value: v2 | v1})
+        }
+    }
+
+    fn add(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.value & addr_mask;
+                    let v2 = x.value & addr_mask;
+                    Ok(StackEntry{value_type: OperationType::Generic, value: v1.wrapping_add(v2)})
+                }
+            }
+        }
+    }
+
+    fn shl(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            // Because wrapping_shl takes a u32, not a u64, we do the
+            // check by hand.
+            let result = if v1 >= 64 {
+                0
+            } else {
+                v2 << v1
+            };
+            Ok(StackEntry{value_type: self.value_type, value: result})
+        }
+    }
+
+    fn shr(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            // Because wrapping_shr takes a u32, not a u64, we do the
+            // check by hand.
+            let result = if v1 >= 64 {
+                0
+            } else {
+                v2 >> v1
+            };
+            Ok(StackEntry{value_type: self.value_type, value: result})
+        }
+    }
+
+    fn shra(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.signed_integer(address_size, addr_mask));
+            // Because wrapping_shr takes a u32, not a u64, we do the
+            // check by hand.
+            let result = if v1 >= 64 {
+                if v2 < 0 {
+                    !0u64
+                } else {
+                    0
+                }
+            } else {
+                (v2 >> v1) as u64
+            };
+            Ok(StackEntry{value_type: self.value_type, value: result})
+        }
+    }
+
+    fn xor(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            Ok(StackEntry{value_type: self.value_type, value: v2 ^ v1})
+        }
+    }
+
+    fn eq(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.signed(address_size, addr_mask);
+                    let v2 = x.signed(address_size, addr_mask);
+                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 == v1 { 1 } else { 0 }})
+                }
+            }
+        }
+    }
+
+    fn ge(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.signed(address_size, addr_mask);
+                    let v2 = x.signed(address_size, addr_mask);
+                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 >= v1 { 1 } else { 0 }})
+                }
+            }
+        }
+    }
+
+    fn gt(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.signed(address_size, addr_mask);
+                    let v2 = x.signed(address_size, addr_mask);
+                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 > v1 { 1 } else { 0 }})
+                }
+            }
+        }
+    }
+
+    fn le(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.signed(address_size, addr_mask);
+                    let v2 = x.signed(address_size, addr_mask);
+                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 <= v1 { 1 } else { 0 }})
+                }
+            }
+        }
+    }
+
+    fn lt(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.signed(address_size, addr_mask);
+                    let v2 = x.signed(address_size, addr_mask);
+                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 < v1 { 1 } else { 0 }})
+                }
+            }
+        }
+    }
+
+    fn ne(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.signed(address_size, addr_mask);
+                    let v2 = x.signed(address_size, addr_mask);
+                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 != v1 { 1 } else { 0 }})
+                }
+            }
+        }
+    }
+}
+
 /// A DWARF expression evaluator.
 ///
 /// # Usage
@@ -949,7 +1298,7 @@ pub struct Evaluation<'input, Endian>
     addr_mask: u64,
 
     // The stack.
-    stack: Vec<u64>,
+    stack: Vec<StackEntry>,
 
     // The next operation to decode and evaluate.
     pc: EndianBuf<'input, Endian>,
@@ -1035,28 +1384,14 @@ impl<'input, Endian> Evaluation<'input, Endian>
         self.max_iterations = Some(value);
     }
 
-    fn pop(&mut self) -> Result<u64, Error> {
+    fn pop(&mut self) -> Result<StackEntry, Error> {
         match self.stack.pop() {
-            Some(value) => Ok(value & self.addr_mask),
+            Some(value) => Ok(value),
             None => Err(Error::NotEnoughStackItems),
         }
     }
 
-    fn pop_signed(&mut self) -> Result<i64, Error> {
-        match self.stack.pop() {
-            Some(value) => {
-                let mut value = value & self.addr_mask;
-                if self.address_size < 8 && (value & (1u64 << (8 * self.address_size - 1))) != 0 {
-                    // Sign extend.
-                    value |= !self.addr_mask;
-                }
-                Ok(value as i64)
-            }
-            None => Err(Error::NotEnoughStackItems),
-        }
-    }
-
-    fn push(&mut self, value: u64) {
+    fn push(&mut self, value: StackEntry) {
         self.stack.push(value);
     }
 
@@ -1069,8 +1404,16 @@ impl<'input, Endian> Evaluation<'input, Endian>
 
         match *operation {
             Operation::Deref { size, space } => {
-                let addr = try!(self.pop());
-                let addr_space = if space { Some(try!(self.pop())) } else { None };
+                let entry = try!(self.pop());
+                let addr = try!(entry.unsigned_integer(self.addr_mask));
+                let addr_space = if space {
+                    let entry = try!(self.pop());
+                    // FIXME.
+                    let value = try!(entry.unsigned_integer(self.addr_mask));
+                    Some(value)
+                } else {
+                    None
+                };
                 return Ok(OperationEvaluationResult::AwaitingMemory {
                     address: addr,
                     size: size,
@@ -1106,149 +1449,147 @@ impl<'input, Endian> Evaluation<'input, Endian>
             }
 
             Operation::Abs => {
-                let value = try!(self.pop_signed());
-                self.push(value.abs() as u64);
+                let value = try!(self.pop());
+                let result = try!(value.abs(self.address_size, self.addr_mask));
+                self.push(result);
             }
             Operation::And => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                self.push(v2 & v1);
+                let result = try!(v1.and(v2, self.addr_mask));
+                self.push(result);
             }
             Operation::Div => {
-                let v1 = try!(self.pop_signed());
-                let v2 = try!(self.pop_signed());
-                if v1 == 0 {
-                    return Err(Error::DivisionByZero.into());
-                }
-                self.push(v2.wrapping_div(v1) as u64);
+                let v1 = try!(self.pop());
+                let v2 = try!(self.pop());
+                let result = try!(v1.div(v2, self.address_size, self.addr_mask));
+                self.push(result);
             }
             Operation::Minus => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                self.push(v2.wrapping_sub(v1));
+                let result = try!(v1.sub(v2, self.addr_mask));
+                self.push(result);
             }
             Operation::Mod => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                if v1 == 0 {
-                    return Err(Error::DivisionByZero.into());
-                }
-                self.push(v2.wrapping_rem(v1));
+                let result = try!(v1.rem(v2, self.addr_mask));
+                self.push(result);
             }
             Operation::Mul => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                self.push(v2.wrapping_mul(v1));
+                let result = try!(v1.mul(v2, self.addr_mask));
+                self.push(result);
             }
             Operation::Neg => {
                 let v = try!(self.pop());
-                self.push(v.wrapping_neg());
+                let result = try!(v.neg(self.addr_mask));
+                self.push(result);
             }
             Operation::Not => {
                 let value = try!(self.pop());
-                self.push(!value);
+                let result = try!(value.not(self.addr_mask));
+                self.push(result);
             }
             Operation::Or => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                self.push(v2 | v1);
+                let result = try!(v1.or(v2, self.addr_mask));
+                self.push(result);
             }
             Operation::Plus => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                self.push(v2.wrapping_add(v1));
+                let result = try!(v1.add(v2, self.addr_mask));
+                self.push(result);
             }
             Operation::PlusConstant { value } => {
                 let v = try!(self.pop());
-                self.push(v.wrapping_add(value));
+                let result = try!(v.add(StackEntry{value_type: v.value_type,
+                                                   value: value},
+                                        self.addr_mask));
+                self.push(result);
             }
             Operation::Shl => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                // Because wrapping_shl takes a u32, not a u64, we do
-                // the check by hand.
-                if v1 >= 64 {
-                    self.push(0);
-                } else {
-                    self.push(v2 << v1)
-                }
+                let result = try!(v1.shl(v2, self.addr_mask));
+                self.push(result);
             }
             Operation::Shr => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                // Because wrapping_shr takes a u32, not a u64, we do
-                // the check by hand.
-                if v1 >= 64 {
-                    self.push(0);
-                } else {
-                    self.push(v2 >> v1)
-                }
+                let result = try!(v1.shr(v2, self.addr_mask));
+                self.push(result);
             }
             Operation::Shra => {
                 let v1 = try!(self.pop());
-                let v2 = try!(self.pop_signed());
-                // Because wrapping_shr takes a u32, not a u64, we do
-                // the check by hand.
-                if v1 >= 64 {
-                    if v2 < 0 {
-                        self.push(!0u64);
-                    } else {
-                        self.push(0);
-                    }
-                } else {
-                    self.push((v2 >> v1) as u64);
-                }
+                let v2 = try!(self.pop());
+                let result = try!(v1.shra(v2, self.address_size, self.addr_mask));
+                self.push(result);
             }
             Operation::Xor => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                self.push(v2 ^ v1);
+                let result = try!(v1.xor(v2, self.addr_mask));
+                self.push(result);
             }
 
             Operation::Bra { target } => {
-                let v = try!(self.pop());
+                let entry = try!(self.pop());
+                // Unclear if this can be applied to floating-point
+                // types.
+                let v = try!(entry.unsigned_integer(self.addr_mask));
                 if v != 0 {
                     self.pc = target;
                 }
             }
 
             Operation::Eq => {
-                let v1 = try!(self.pop_signed());
-                let v2 = try!(self.pop_signed());
-                self.push(if v2 == v1 { 1 } else { 0 });
+                let v1 = try!(self.pop());
+                let v2 = try!(self.pop());
+                let result = try!(v1.eq(v2, self.address_size, self.addr_mask));
+                self.push(result);
             }
             Operation::Ge => {
-                let v1 = try!(self.pop_signed());
-                let v2 = try!(self.pop_signed());
-                self.push(if v2 >= v1 { 1 } else { 0 });
+                let v1 = try!(self.pop());
+                let v2 = try!(self.pop());
+                let result = try!(v1.ge(v2, self.address_size, self.addr_mask));
+                self.push(result);
             }
             Operation::Gt => {
-                let v1 = try!(self.pop_signed());
-                let v2 = try!(self.pop_signed());
-                self.push(if v2 > v1 { 1 } else { 0 });
+                let v1 = try!(self.pop());
+                let v2 = try!(self.pop());
+                let result = try!(v1.gt(v2, self.address_size, self.addr_mask));
+                self.push(result);
             }
             Operation::Le => {
-                let v1 = try!(self.pop_signed());
-                let v2 = try!(self.pop_signed());
-                self.push(if v2 <= v1 { 1 } else { 0 });
+                let v1 = try!(self.pop());
+                let v2 = try!(self.pop());
+                let result = try!(v1.le(v2, self.address_size, self.addr_mask));
+                self.push(result);
             }
             Operation::Lt => {
-                let v1 = try!(self.pop_signed());
-                let v2 = try!(self.pop_signed());
-                self.push(if v2 < v1 { 1 } else { 0 });
+                let v1 = try!(self.pop());
+                let v2 = try!(self.pop());
+                let result = try!(v1.lt(v2, self.address_size, self.addr_mask));
+                self.push(result);
             }
             Operation::Ne => {
-                let v1 = try!(self.pop_signed());
-                let v2 = try!(self.pop_signed());
-                self.push(if v2 != v1 { 1 } else { 0 });
+                let v1 = try!(self.pop());
+                let v2 = try!(self.pop());
+                let result = try!(v1.ne(v2, self.address_size, self.addr_mask));
+                self.push(result);
             }
 
             Operation::Skip { target } => {
                 self.pc = target;
             }
 
-            Operation::Literal { value } => {
-                self.push(value);
+            Operation::Literal { value_type, value } => {
+                self.push(StackEntry{value_type: value_type, value: value});
             }
 
             Operation::RegisterOffset { register, offset } => {
@@ -1268,7 +1609,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
 
             Operation::PushObjectAddress => {
                 if let Some(value) = self.object_address {
-                    self.push(value);
+                    self.push(StackEntry{value_type: OperationType::Generic, value: value});
                 } else {
                     return Err(Error::InvalidPushObjectAddress.into());
                 }
@@ -1281,7 +1622,8 @@ impl<'input, Endian> Evaluation<'input, Endian>
             }
 
             Operation::TLS => {
-                let value = try!(self.pop());
+                let entry = try!(self.pop());
+                let value = try!(entry.unsigned_integer(self.addr_mask));
                 return Ok(OperationEvaluationResult::AwaitingTls {
                     index: value,
                 });
@@ -1303,7 +1645,10 @@ impl<'input, Endian> Evaluation<'input, Endian>
 
             Operation::StackValue => {
                 terminated = true;
-                current_location = Location::Scalar { value: try!(self.pop()) };
+                // FIXME - can actually be floating point
+                let entry = try!(self.pop());
+                let value = try!(entry.unsigned_integer(self.addr_mask));
+                current_location = Location::Scalar { value: value };
             }
 
             Operation::ImplicitPointer { value, byte_offset } => {
@@ -1354,7 +1699,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Start(initial_value) => {
                 if let Some(value) = initial_value {
-                    self.push(value);
+                    self.push(StackEntry{value_type: OperationType::Generic, value: value});
                 }
                 self.state = EvaluationState::Ready;
             },
@@ -1386,7 +1731,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingMemory { .. }) => {
-                self.push(value);
+                self.push(StackEntry{value_type: OperationType::Generic, value: value});
             },
             _ => panic!("Called `Evaluation::resume_with_memory` without a preceding `EvaluationResult::RequiresMemory`"),
         };
@@ -1407,7 +1752,8 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingRegister { offset, .. }) => {
-                self.push(register.wrapping_add(offset));
+                self.push(StackEntry{value_type: OperationType::Generic,
+                                     value: register.wrapping_add(offset)});
             },
             _ => panic!("Called `Evaluation::resume_with_register` without a preceding `EvaluationResult::RequiresRegister`"),
         };
@@ -1428,7 +1774,8 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingFrameBase { offset }) => {
-                self.push(frame_base.wrapping_add(offset));
+                self.push(StackEntry{value_type: OperationType::Generic,
+                                     value: frame_base.wrapping_add(offset)});
             },
             _ => panic!("Called `Evaluation::resume_with_frame_base` without a preceding `EvaluationResult::RequiresFrameBase`"),
         };
@@ -1449,7 +1796,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingTls { .. }) => {
-                self.push(value);
+                self.push(StackEntry{value_type: OperationType::Generic, value: value});
             },
             _ => panic!("Called `Evaluation::resume_with_tls` without a preceding `EvaluationResult::RequiresTls`"),
         };
@@ -1470,7 +1817,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingCfa) => {
-                self.push(cfa);
+                self.push(StackEntry{value_type: OperationType::Generic, value: cfa});
             },
             _ => panic!("Called `Evaluation::resume_with_call_frame_cfa` without a preceding `EvaluationResult::RequiresCallFrameCfa`"),
         };
@@ -1516,7 +1863,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingEntryValue { .. }) => {
-                self.push(entry_value);
+                self.push(StackEntry{value_type: OperationType::Generic, value: entry_value});
             },
             _ => panic!("Called `Evaluation::resume_with_entry_value` without a preceding `EvaluationResult::RequiresEntryValue`"),
         };
@@ -1565,7 +1912,9 @@ impl<'input, Endian> Evaluation<'input, Endian>
                             // result is the address on the stack.
                             assert_eq!(current_location, Location::Empty);
                             if !self.stack.is_empty() {
-                                current_location = Location::Address { address: try!(self.pop()) };
+                                let entry = try!(self.pop());
+                                let value = try!(entry.unsigned_integer(self.addr_mask));
+                                current_location = Location::Address { address: value };
                             }
                         } else if !eof {
                             let (newpc, operation) = try!(Operation::parse(self.pc,
@@ -1643,7 +1992,8 @@ impl<'input, Endian> Evaluation<'input, Endian>
         // If no pieces have been seen, use the stack top as the
         // result.
         if self.result.is_empty() {
-            let addr = try!(self.pop());
+            let entry = try!(self.pop());
+            let addr = try!(entry.unsigned_integer(self.addr_mask));
             self.result.push(Piece {
                 size_in_bits: None,
                 bit_offset: None,
@@ -1774,38 +2124,38 @@ mod tests {
                       (constants::DW_OP_le, Operation::Le),
                       (constants::DW_OP_lt, Operation::Lt),
                       (constants::DW_OP_ne, Operation::Ne),
-                      (constants::DW_OP_lit0, Operation::Literal { value: 0 }),
-                      (constants::DW_OP_lit1, Operation::Literal { value: 1 }),
-                      (constants::DW_OP_lit2, Operation::Literal { value: 2 }),
-                      (constants::DW_OP_lit3, Operation::Literal { value: 3 }),
-                      (constants::DW_OP_lit4, Operation::Literal { value: 4 }),
-                      (constants::DW_OP_lit5, Operation::Literal { value: 5 }),
-                      (constants::DW_OP_lit6, Operation::Literal { value: 6 }),
-                      (constants::DW_OP_lit7, Operation::Literal { value: 7 }),
-                      (constants::DW_OP_lit8, Operation::Literal { value: 8 }),
-                      (constants::DW_OP_lit9, Operation::Literal { value: 9 }),
-                      (constants::DW_OP_lit10, Operation::Literal { value: 10 }),
-                      (constants::DW_OP_lit11, Operation::Literal { value: 11 }),
-                      (constants::DW_OP_lit12, Operation::Literal { value: 12 }),
-                      (constants::DW_OP_lit13, Operation::Literal { value: 13 }),
-                      (constants::DW_OP_lit14, Operation::Literal { value: 14 }),
-                      (constants::DW_OP_lit15, Operation::Literal { value: 15 }),
-                      (constants::DW_OP_lit16, Operation::Literal { value: 16 }),
-                      (constants::DW_OP_lit17, Operation::Literal { value: 17 }),
-                      (constants::DW_OP_lit18, Operation::Literal { value: 18 }),
-                      (constants::DW_OP_lit19, Operation::Literal { value: 19 }),
-                      (constants::DW_OP_lit20, Operation::Literal { value: 20 }),
-                      (constants::DW_OP_lit21, Operation::Literal { value: 21 }),
-                      (constants::DW_OP_lit22, Operation::Literal { value: 22 }),
-                      (constants::DW_OP_lit23, Operation::Literal { value: 23 }),
-                      (constants::DW_OP_lit24, Operation::Literal { value: 24 }),
-                      (constants::DW_OP_lit25, Operation::Literal { value: 25 }),
-                      (constants::DW_OP_lit26, Operation::Literal { value: 26 }),
-                      (constants::DW_OP_lit27, Operation::Literal { value: 27 }),
-                      (constants::DW_OP_lit28, Operation::Literal { value: 28 }),
-                      (constants::DW_OP_lit29, Operation::Literal { value: 29 }),
-                      (constants::DW_OP_lit30, Operation::Literal { value: 30 }),
-                      (constants::DW_OP_lit31, Operation::Literal { value: 31 }),
+                      (constants::DW_OP_lit0, Operation::Literal { value_type: OperationType::Generic, value: 0 }),
+                      (constants::DW_OP_lit1, Operation::Literal { value_type: OperationType::Generic, value: 1 }),
+                      (constants::DW_OP_lit2, Operation::Literal { value_type: OperationType::Generic, value: 2 }),
+                      (constants::DW_OP_lit3, Operation::Literal { value_type: OperationType::Generic, value: 3 }),
+                      (constants::DW_OP_lit4, Operation::Literal { value_type: OperationType::Generic, value: 4 }),
+                      (constants::DW_OP_lit5, Operation::Literal { value_type: OperationType::Generic, value: 5 }),
+                      (constants::DW_OP_lit6, Operation::Literal { value_type: OperationType::Generic, value: 6 }),
+                      (constants::DW_OP_lit7, Operation::Literal { value_type: OperationType::Generic, value: 7 }),
+                      (constants::DW_OP_lit8, Operation::Literal { value_type: OperationType::Generic, value: 8 }),
+                      (constants::DW_OP_lit9, Operation::Literal { value_type: OperationType::Generic, value: 9 }),
+                      (constants::DW_OP_lit10, Operation::Literal { value_type: OperationType::Generic, value: 10 }),
+                      (constants::DW_OP_lit11, Operation::Literal { value_type: OperationType::Generic, value: 11 }),
+                      (constants::DW_OP_lit12, Operation::Literal { value_type: OperationType::Generic, value: 12 }),
+                      (constants::DW_OP_lit13, Operation::Literal { value_type: OperationType::Generic, value: 13 }),
+                      (constants::DW_OP_lit14, Operation::Literal { value_type: OperationType::Generic, value: 14 }),
+                      (constants::DW_OP_lit15, Operation::Literal { value_type: OperationType::Generic, value: 15 }),
+                      (constants::DW_OP_lit16, Operation::Literal { value_type: OperationType::Generic, value: 16 }),
+                      (constants::DW_OP_lit17, Operation::Literal { value_type: OperationType::Generic, value: 17 }),
+                      (constants::DW_OP_lit18, Operation::Literal { value_type: OperationType::Generic, value: 18 }),
+                      (constants::DW_OP_lit19, Operation::Literal { value_type: OperationType::Generic, value: 19 }),
+                      (constants::DW_OP_lit20, Operation::Literal { value_type: OperationType::Generic, value: 20 }),
+                      (constants::DW_OP_lit21, Operation::Literal { value_type: OperationType::Generic, value: 21 }),
+                      (constants::DW_OP_lit22, Operation::Literal { value_type: OperationType::Generic, value: 22 }),
+                      (constants::DW_OP_lit23, Operation::Literal { value_type: OperationType::Generic, value: 23 }),
+                      (constants::DW_OP_lit24, Operation::Literal { value_type: OperationType::Generic, value: 24 }),
+                      (constants::DW_OP_lit25, Operation::Literal { value_type: OperationType::Generic, value: 25 }),
+                      (constants::DW_OP_lit26, Operation::Literal { value_type: OperationType::Generic, value: 26 }),
+                      (constants::DW_OP_lit27, Operation::Literal { value_type: OperationType::Generic, value: 27 }),
+                      (constants::DW_OP_lit28, Operation::Literal { value_type: OperationType::Generic, value: 28 }),
+                      (constants::DW_OP_lit29, Operation::Literal { value_type: OperationType::Generic, value: 29 }),
+                      (constants::DW_OP_lit30, Operation::Literal { value_type: OperationType::Generic, value: 30 }),
+                      (constants::DW_OP_lit31, Operation::Literal { value_type: OperationType::Generic, value: 31 }),
                       (constants::DW_OP_reg0, Operation::Register { register: 0 }),
                       (constants::DW_OP_reg1, Operation::Register { register: 1 }),
                       (constants::DW_OP_reg2, Operation::Register { register: 2 }),
@@ -1860,10 +2210,10 @@ mod tests {
         let address_size = 4;
         let format = Format::Dwarf32;
 
-        let inputs = [(constants::DW_OP_const1u, 23, Operation::Literal { value: 23 }),
+        let inputs = [(constants::DW_OP_const1u, 23, Operation::Literal { value_type: OperationType::Generic, value: 23 }),
                       (constants::DW_OP_const1s,
                        (-23i8) as u8,
-                       Operation::Literal { value: (-23i64) as u64 }),
+                       Operation::Literal { value_type: OperationType::Generic, value: (-23i64) as u64 }),
                       (constants::DW_OP_pick, 7, Operation::Pick { index: 7 }),
                       (constants::DW_OP_deref_size,
                        19,
@@ -1892,10 +2242,10 @@ mod tests {
 
         // While bra and skip are 3-byte opcodes, they aren't tested here,
         // but rather specially in their own function.
-        let inputs = [(constants::DW_OP_const2u, 23, Operation::Literal { value: 23 }),
+        let inputs = [(constants::DW_OP_const2u, 23, Operation::Literal { value_type: OperationType::Generic, value: 23 }),
                       (constants::DW_OP_const2s,
                        (-23i16) as u16,
-                       Operation::Literal { value: (-23i64) as u64 }),
+                       Operation::Literal { value_type: OperationType::Generic, value: (-23i64) as u64 }),
                       (constants::DW_OP_call2,
                        1138,
                        Operation::Call { offset: DieReference::UnitRef(UnitOffset(1138)) })];
@@ -1961,11 +2311,11 @@ mod tests {
         let format = Format::Dwarf32;
 
         let inputs =
-            [(constants::DW_OP_addr, 0x12345678, Operation::Literal { value: 0x12345678 }),
-             (constants::DW_OP_const4u, 0x12345678, Operation::Literal { value: 0x12345678 }),
+            [(constants::DW_OP_addr, 0x12345678, Operation::Literal { value_type: OperationType::Generic, value: 0x12345678 }),
+             (constants::DW_OP_const4u, 0x12345678, Operation::Literal { value_type: OperationType::Generic, value: 0x12345678 }),
              (constants::DW_OP_const4s,
               (-23i32) as u32,
-              Operation::Literal { value: (-23i32) as u64 }),
+              Operation::Literal { value_type: OperationType::Generic, value: (-23i32) as u64 }),
              (constants::DW_OP_call4,
               0x12345678,
               Operation::Call { offset: DieReference::UnitRef(UnitOffset(0x12345678)) }),
@@ -1988,13 +2338,13 @@ mod tests {
 
         let inputs = [(constants::DW_OP_addr,
                        0x1234567812345678,
-                       Operation::Literal { value: 0x1234567812345678 }),
+                       Operation::Literal { value_type: OperationType::Generic, value: 0x1234567812345678 }),
                       (constants::DW_OP_const8u,
                        0x1234567812345678,
-                       Operation::Literal { value: 0x1234567812345678 }),
+                       Operation::Literal { value_type: OperationType::Generic, value: 0x1234567812345678 }),
                       (constants::DW_OP_const8s,
                        (-23i32) as u64,
-                       Operation::Literal { value: (-23i32) as u64 }),
+                       Operation::Literal { value_type: OperationType::Generic, value: (-23i32) as u64 }),
                       (constants::DW_OP_call_ref,
                        0x1234567812345678,
                        Operation::Call {
@@ -2024,7 +2374,7 @@ mod tests {
                       -0x7fffffffffffffff];
         for value in values.iter() {
             let mut inputs = vec!(
-                (constants::DW_OP_consts.0, Operation::Literal { value: *value as u64}),
+                (constants::DW_OP_consts.0, Operation::Literal { value_type: OperationType::Generic, value: *value as u64}),
                 (constants::DW_OP_fbreg.0, Operation::FrameOffset { offset: *value }),
             );
 
@@ -2052,7 +2402,7 @@ mod tests {
         let values = [0, 1, 0x100, 0x1eeeeeee, 0x7fffffffffffffff, !0u64];
         for value in values.iter() {
             let mut inputs = vec!(
-                (constants::DW_OP_constu, Operation::Literal { value: *value}),
+                (constants::DW_OP_constu, Operation::Literal { value_type: OperationType::Generic, value: *value}),
                 (constants::DW_OP_plus_uconst, Operation::PlusConstant { value: *value }),
                 (constants::DW_OP_regx, Operation::Register { register: *value }),
             );

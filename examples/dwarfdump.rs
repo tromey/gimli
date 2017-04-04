@@ -543,7 +543,7 @@ fn dump_op<Endian>(dwop: gimli::DwOp, op: gimli::Operation<Endian>, newpc: &[u8]
             let offset = newpc.len() as isize - target.len() as isize;
             print!(" {}", offset);
         }
-        gimli::Operation::Literal { value } => {
+        gimli::Operation::Literal { value_type: _, value } => {
             match dwop {
                 gimli::DW_OP_addr => {
                     print!(" 0x{:08x}", value);
