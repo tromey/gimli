@@ -21,8 +21,7 @@ pub enum DieReference {
 /// The type of an entry on the DWARF stack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationType {
-    /// The generic type, which is address-sized and of unspecified
-    /// sign.
+    /// The generic type, which is address-sized and of unspecified sign.
     Generic,
     // Boolean,
     // S8,
@@ -926,12 +925,12 @@ pub enum EvaluationResult<'input, Endian>
 }
 
 #[derive(Debug, Clone, Copy)]
-struct StackEntry {
+struct TypedValue {
     value_type: OperationType,
     value: u64,
 }
 
-impl StackEntry {
+impl TypedValue {
     fn signed(&self, address_size: u8, addr_mask: u64) -> i64 {
         let value = self.value & addr_mask;
         if address_size < 8 && (value & (1u64 << (8 * address_size - 1))) != 0 {
@@ -959,26 +958,26 @@ impl StackEntry {
         }
     }
 
-    fn abs(&self, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn abs(&self, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         match self.value_type {
             OperationType::Generic => {
                 let v = self.signed(address_size, addr_mask);
-                Ok(StackEntry{value_type: OperationType::Generic, value: v.abs() as u64})
+                Ok(TypedValue{value_type: OperationType::Generic, value: v.abs() as u64})
             }
         }
     }
 
-    fn and(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn and(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
             let v1 = try!(self.unsigned_integer(addr_mask));
             let v2 = try!(x.unsigned_integer(addr_mask));
-            Ok(StackEntry{value_type: self.value_type, value: v1 & v2})
+            Ok(TypedValue{value_type: self.value_type, value: v1 & v2})
         }
     }
 
-    fn div(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn div(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -989,14 +988,14 @@ impl StackEntry {
                         Err(Error::DivisionByZero.into())
                     } else {
                         let v2 = x.signed(address_size, addr_mask);
-                        Ok(StackEntry{value_type: OperationType::Generic, value: v2.wrapping_div(v1) as u64})
+                        Ok(TypedValue{value_type: OperationType::Generic, value: v2.wrapping_div(v1) as u64})
                     }
                 }
             }
         }
     }
 
-    fn sub(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn sub(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1004,31 +1003,13 @@ impl StackEntry {
                 OperationType::Generic => {
                     let v1 = self.value & addr_mask;
                     let v2 = x.value & addr_mask;
-                    Ok(StackEntry{value_type: OperationType::Generic, value: v2.wrapping_sub(v1)})
+                    Ok(TypedValue{value_type: OperationType::Generic, value: v2.wrapping_sub(v1)})
                 }
             }
         }
     }
 
-    fn rem(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
-        if self.value_type != x.value_type {
-            Err(Error::TypeMismatch)
-        } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.value & addr_mask;
-                    let v2 = x.value & addr_mask;
-                    if v1 == 0 {
-                        Err(Error::DivisionByZero.into())
-                    } else {
-                        Ok(StackEntry{value_type: OperationType::Generic, value: v2.wrapping_rem(v1)})
-                    }
-                }
-            }
-        }
-    }
-
-    fn mul(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn rem(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1039,38 +1020,56 @@ impl StackEntry {
                     if v1 == 0 {
                         Err(Error::DivisionByZero.into())
                     } else {
-                        Ok(StackEntry{value_type: OperationType::Generic, value: v2.wrapping_mul(v1)})
+                        Ok(TypedValue{value_type: OperationType::Generic, value: v2.wrapping_rem(v1)})
                     }
                 }
             }
         }
     }
 
-    fn neg(&self, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn mul(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
+        if self.value_type != x.value_type {
+            Err(Error::TypeMismatch)
+        } else {
+            match self.value_type {
+                OperationType::Generic => {
+                    let v1 = self.value & addr_mask;
+                    let v2 = x.value & addr_mask;
+                    if v1 == 0 {
+                        Err(Error::DivisionByZero.into())
+                    } else {
+                        Ok(TypedValue{value_type: OperationType::Generic, value: v2.wrapping_mul(v1)})
+                    }
+                }
+            }
+        }
+    }
+
+    fn neg(&self, addr_mask: u64) -> Result<TypedValue, Error> {
         match self.value_type {
             OperationType::Generic => {
                 let v = self.value & addr_mask;
-                Ok(StackEntry{value_type: OperationType::Generic, value: v.wrapping_neg()})
+                Ok(TypedValue{value_type: OperationType::Generic, value: v.wrapping_neg()})
             }
         }
     }
 
-    fn not(&self, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn not(&self, addr_mask: u64) -> Result<TypedValue, Error> {
         let v = try!(self.unsigned_integer(addr_mask));
-        Ok(StackEntry{value_type: self.value_type, value: !v})
+        Ok(TypedValue{value_type: self.value_type, value: !v})
     }
 
-    fn or(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn or(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
             let v1 = try!(self.unsigned_integer(addr_mask));
             let v2 = try!(x.unsigned_integer(addr_mask));
-            Ok(StackEntry{value_type: self.value_type, value: v2 | v1})
+            Ok(TypedValue{value_type: self.value_type, value: v2 | v1})
         }
     }
 
-    fn add(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn add(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1078,13 +1077,13 @@ impl StackEntry {
                 OperationType::Generic => {
                     let v1 = self.value & addr_mask;
                     let v2 = x.value & addr_mask;
-                    Ok(StackEntry{value_type: OperationType::Generic, value: v1.wrapping_add(v2)})
+                    Ok(TypedValue{value_type: OperationType::Generic, value: v1.wrapping_add(v2)})
                 }
             }
         }
     }
 
-    fn shl(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn shl(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1097,11 +1096,11 @@ impl StackEntry {
             } else {
                 v2 << v1
             };
-            Ok(StackEntry{value_type: self.value_type, value: result})
+            Ok(TypedValue{value_type: self.value_type, value: result})
         }
     }
 
-    fn shr(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn shr(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1114,11 +1113,11 @@ impl StackEntry {
             } else {
                 v2 >> v1
             };
-            Ok(StackEntry{value_type: self.value_type, value: result})
+            Ok(TypedValue{value_type: self.value_type, value: result})
         }
     }
 
-    fn shra(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn shra(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1135,21 +1134,21 @@ impl StackEntry {
             } else {
                 (v2 >> v1) as u64
             };
-            Ok(StackEntry{value_type: self.value_type, value: result})
+            Ok(TypedValue{value_type: self.value_type, value: result})
         }
     }
 
-    fn xor(&self, x: StackEntry, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn xor(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
             let v1 = try!(self.unsigned_integer(addr_mask));
             let v2 = try!(x.unsigned_integer(addr_mask));
-            Ok(StackEntry{value_type: self.value_type, value: v2 ^ v1})
+            Ok(TypedValue{value_type: self.value_type, value: v2 ^ v1})
         }
     }
 
-    fn eq(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn eq(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1157,13 +1156,13 @@ impl StackEntry {
                 OperationType::Generic => {
                     let v1 = self.signed(address_size, addr_mask);
                     let v2 = x.signed(address_size, addr_mask);
-                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 == v1 { 1 } else { 0 }})
+                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 == v1 { 1 } else { 0 }})
                 }
             }
         }
     }
 
-    fn ge(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn ge(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1171,13 +1170,13 @@ impl StackEntry {
                 OperationType::Generic => {
                     let v1 = self.signed(address_size, addr_mask);
                     let v2 = x.signed(address_size, addr_mask);
-                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 >= v1 { 1 } else { 0 }})
+                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 >= v1 { 1 } else { 0 }})
                 }
             }
         }
     }
 
-    fn gt(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn gt(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1185,13 +1184,13 @@ impl StackEntry {
                 OperationType::Generic => {
                     let v1 = self.signed(address_size, addr_mask);
                     let v2 = x.signed(address_size, addr_mask);
-                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 > v1 { 1 } else { 0 }})
+                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 > v1 { 1 } else { 0 }})
                 }
             }
         }
     }
 
-    fn le(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn le(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1199,13 +1198,13 @@ impl StackEntry {
                 OperationType::Generic => {
                     let v1 = self.signed(address_size, addr_mask);
                     let v2 = x.signed(address_size, addr_mask);
-                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 <= v1 { 1 } else { 0 }})
+                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 <= v1 { 1 } else { 0 }})
                 }
             }
         }
     }
 
-    fn lt(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn lt(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1213,13 +1212,13 @@ impl StackEntry {
                 OperationType::Generic => {
                     let v1 = self.signed(address_size, addr_mask);
                     let v2 = x.signed(address_size, addr_mask);
-                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 < v1 { 1 } else { 0 }})
+                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 < v1 { 1 } else { 0 }})
                 }
             }
         }
     }
 
-    fn ne(&self, x: StackEntry, address_size: u8, addr_mask: u64) -> Result<StackEntry, Error> {
+    fn ne(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
@@ -1227,7 +1226,7 @@ impl StackEntry {
                 OperationType::Generic => {
                     let v1 = self.signed(address_size, addr_mask);
                     let v2 = x.signed(address_size, addr_mask);
-                    Ok(StackEntry{value_type: OperationType::Generic, value: if v2 != v1 { 1 } else { 0 }})
+                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 != v1 { 1 } else { 0 }})
                 }
             }
         }
@@ -1298,7 +1297,7 @@ pub struct Evaluation<'input, Endian>
     addr_mask: u64,
 
     // The stack.
-    stack: Vec<StackEntry>,
+    stack: Vec<TypedValue>,
 
     // The next operation to decode and evaluate.
     pc: EndianBuf<'input, Endian>,
@@ -1384,14 +1383,14 @@ impl<'input, Endian> Evaluation<'input, Endian>
         self.max_iterations = Some(value);
     }
 
-    fn pop(&mut self) -> Result<StackEntry, Error> {
+    fn pop(&mut self) -> Result<TypedValue, Error> {
         match self.stack.pop() {
             Some(value) => Ok(value),
             None => Err(Error::NotEnoughStackItems),
         }
     }
 
-    fn push(&mut self, value: StackEntry) {
+    fn push(&mut self, value: TypedValue) {
         self.stack.push(value);
     }
 
@@ -1507,7 +1506,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
             }
             Operation::PlusConstant { value } => {
                 let v = try!(self.pop());
-                let result = try!(v.add(StackEntry{value_type: v.value_type,
+                let result = try!(v.add(TypedValue{value_type: v.value_type,
                                                    value: value},
                                         self.addr_mask));
                 self.push(result);
@@ -1589,7 +1588,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
             }
 
             Operation::Literal { value_type, value } => {
-                self.push(StackEntry{value_type: value_type, value: value});
+                self.push(TypedValue{value_type: value_type, value: value});
             }
 
             Operation::RegisterOffset { register, offset } => {
@@ -1609,7 +1608,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
 
             Operation::PushObjectAddress => {
                 if let Some(value) = self.object_address {
-                    self.push(StackEntry{value_type: OperationType::Generic, value: value});
+                    self.push(TypedValue{value_type: OperationType::Generic, value: value});
                 } else {
                     return Err(Error::InvalidPushObjectAddress.into());
                 }
@@ -1699,7 +1698,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Start(initial_value) => {
                 if let Some(value) = initial_value {
-                    self.push(StackEntry{value_type: OperationType::Generic, value: value});
+                    self.push(TypedValue{value_type: OperationType::Generic, value: value});
                 }
                 self.state = EvaluationState::Ready;
             },
@@ -1731,7 +1730,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingMemory { .. }) => {
-                self.push(StackEntry{value_type: OperationType::Generic, value: value});
+                self.push(TypedValue{value_type: OperationType::Generic, value: value});
             },
             _ => panic!("Called `Evaluation::resume_with_memory` without a preceding `EvaluationResult::RequiresMemory`"),
         };
@@ -1752,7 +1751,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingRegister { offset, .. }) => {
-                self.push(StackEntry{value_type: OperationType::Generic,
+                self.push(TypedValue{value_type: OperationType::Generic,
                                      value: register.wrapping_add(offset)});
             },
             _ => panic!("Called `Evaluation::resume_with_register` without a preceding `EvaluationResult::RequiresRegister`"),
@@ -1774,7 +1773,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingFrameBase { offset }) => {
-                self.push(StackEntry{value_type: OperationType::Generic,
+                self.push(TypedValue{value_type: OperationType::Generic,
                                      value: frame_base.wrapping_add(offset)});
             },
             _ => panic!("Called `Evaluation::resume_with_frame_base` without a preceding `EvaluationResult::RequiresFrameBase`"),
@@ -1796,7 +1795,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingTls { .. }) => {
-                self.push(StackEntry{value_type: OperationType::Generic, value: value});
+                self.push(TypedValue{value_type: OperationType::Generic, value: value});
             },
             _ => panic!("Called `Evaluation::resume_with_tls` without a preceding `EvaluationResult::RequiresTls`"),
         };
@@ -1817,7 +1816,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingCfa) => {
-                self.push(StackEntry{value_type: OperationType::Generic, value: cfa});
+                self.push(TypedValue{value_type: OperationType::Generic, value: cfa});
             },
             _ => panic!("Called `Evaluation::resume_with_call_frame_cfa` without a preceding `EvaluationResult::RequiresCallFrameCfa`"),
         };
@@ -1863,7 +1862,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
         match self.state {
             EvaluationState::Error(err) => return Err(err),
             EvaluationState::Waiting(OperationEvaluationResult::AwaitingEntryValue { .. }) => {
-                self.push(StackEntry{value_type: OperationType::Generic, value: entry_value});
+                self.push(TypedValue{value_type: OperationType::Generic, value: entry_value});
             },
             _ => panic!("Called `Evaluation::resume_with_entry_value` without a preceding `EvaluationResult::RequiresEntryValue`"),
         };
