@@ -24,16 +24,6 @@ pub enum OperationType {
     /// The generic type, which is address-sized and of unspecified sign.
     /// This type is also used to represent address base types.
     Generic,
-    // S8,
-    // U8,
-    // S16,
-    // U16,
-    // S32,
-    // U32,
-    // S64,
-    // U64,
-    // F32,
-    // F64
 }
 
 /// A typed value.
@@ -44,24 +34,6 @@ struct TypedValue {
     /// Blah.
     value: u64,
 }
-
-// fn operation_type_size(ot: OperationType) -> u8 {
-//     match ot {
-//         Generic => FIXME,
-//         Boolean => 1,
-//         S8 => 1,
-//         U8 => 1,
-//         S16 => 2,
-//         U16 => 2,
-//         S32 => 4,
-//         U32 => 4,
-//         S64 => 8,
-//         U64 => 8,
-//         Address => FIXME,
-//         F32 => 4,
-//         F64 => 8,
-//     }
-// }
 
 /// A single decoded DWARF expression operation.
 ///
