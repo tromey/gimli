@@ -24,7 +24,6 @@ pub enum OperationType {
     /// The generic type, which is address-sized and of unspecified sign.
     /// This type is also used to represent address base types.
     Generic,
-    // Boolean,
     // S8,
     // U8,
     // S16,
@@ -33,9 +32,17 @@ pub enum OperationType {
     // U32,
     // S64,
     // U64,
-    // Address,
     // F32,
     // F64
+}
+
+/// A typed value.
+#[derive(Debug, Clone, Copy)]
+struct TypedValue {
+    /// The type of the value.
+    value_type: OperationType,
+    /// Blah.
+    value: u64,
 }
 
 // fn operation_type_size(ot: OperationType) -> u8 {
@@ -923,12 +930,6 @@ pub enum EvaluationResult<'input, Endian>
     /// caller determines what value to provide it should resume the
     /// `Evaluation` by calling `Evaluation::resume_with_entry_value`.
     RequiresEntryValue(EndianBuf<'input, Endian>),
-}
-
-#[derive(Debug, Clone, Copy)]
-struct TypedValue {
-    value_type: OperationType,
-    value: u64,
 }
 
 impl TypedValue {
