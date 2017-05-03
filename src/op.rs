@@ -24,6 +24,25 @@ pub enum OperationType {
     /// The generic type, which is address-sized and of unspecified sign.
     /// This type is also used to represent address base types.
     Generic,
+    /// x
+    I8,
+    /// x
+    U8,
+    /// x
+    I16,
+    /// x
+    /// x
+    U16,
+    /// x
+    I32,
+    /// x
+    U32,
+    /// x
+    I64,
+    /// x
+    U64,
+    // F32,
+    // F64
 }
 
 /// A typed value.
@@ -905,37 +924,87 @@ pub enum EvaluationResult<'input, Endian>
 }
 
 impl TypedValue {
-    fn signed(&self, address_size: u8, addr_mask: u64) -> i64 {
-        let value = self.value & addr_mask;
-        if address_size < 8 && (value & (1u64 << (8 * address_size - 1))) != 0 {
+    fn signed(&self, mask: u64) -> i64 {
+        let value = self.value & mask;
+        // Maybe we have to sign extend.  However, there's nothing to
+        // do if the mask is the whole 64 bits, or if the relevant
+        // sign bit is zero.
+        if mask != !0 && (value & ((mask >> 1) + 1)) != 0 {
             // Sign extend.
-            (value | !addr_mask) as i64
+            (value | !mask) as i64
         } else {
             value as i64
         }
     }
 
-    fn signed_integer(&self, address_size: u8, addr_mask: u64) -> Result<i64, Error> {
-        if self.value_type != OperationType::Generic {
-            Err(Error::IntegralTypeRequired)
-        } else {
-            Ok(self.signed(address_size, addr_mask))
+    fn signed_integer(&self, addr_mask: u64) -> Result<i64, Error> {
+        match self.value_type {
+            OperationType::Generic => {
+                Ok(self.signed(addr_mask))
+            }
+            OperationType::I8 => {
+                Ok(self.signed(0xff))
+            }
+            OperationType::U8 => {
+                Ok((self.value & 0xff) as i64)
+            }
+            OperationType::I16 => {
+                Ok(self.signed(0xffff))
+            }
+            OperationType::U16 => {
+                Ok((self.value & 0xffff) as i64)
+            }
+            OperationType::I32 => {
+                Ok(self.signed(0xffffffff))
+            }
+            OperationType::U32 => {
+                Ok((self.value & 0xffffffff) as i64)
+            }
+            OperationType::I64 => {
+                Ok(self.value as i64)
+            }
+            OperationType::U64 => {
+                Ok(self.value as i64)
+            }
         }
     }
 
     fn unsigned_integer(&self, addr_mask: u64) -> Result<u64, Error> {
-        // FIXME.
-        if self.value_type != OperationType::Generic {
-            Err(Error::IntegralTypeRequired)
-        } else {
-            Ok(self.value & addr_mask)
+        match self.value_type {
+            OperationType::Generic => {
+                Ok(self.value & addr_mask)
+            }
+            OperationType::I8 => {
+                Ok(self.value & 0xff)
+            }
+            OperationType::U8 => {
+                Ok(self.value & 0xff)
+            }
+            OperationType::I16 => {
+                Ok(self.value & 0xffff)
+            }
+            OperationType::U16 => {
+                Ok(self.value & 0xffff)
+            }
+            OperationType::I32 => {
+                Ok(self.value & 0xffffffff)
+            }
+            OperationType::U32 => {
+                Ok(self.value & 0xffffffff)
+            }
+            OperationType::I64 => {
+                Ok(self.value)
+            }
+            OperationType::U64 => {
+                Ok(self.value)
+            }
         }
     }
 
-    fn abs(&self, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn abs(&self, addr_mask: u64) -> Result<TypedValue, Error> {
         match self.value_type {
-            OperationType::Generic => {
-                let v = self.signed(address_size, addr_mask);
+            _ => {
+                let v = try!(self.signed_integer(addr_mask));
                 Ok(TypedValue{value_type: OperationType::Generic, value: v.abs() as u64})
             }
         }
@@ -951,18 +1020,19 @@ impl TypedValue {
         }
     }
 
-    fn div(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn div(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
             match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.signed(address_size, addr_mask);
+                _ => {
+                    let v1 = try!(self.signed_integer(addr_mask));
                     if v1 == 0 {
                         Err(Error::DivisionByZero.into())
                     } else {
-                        let v2 = x.signed(address_size, addr_mask);
-                        Ok(TypedValue{value_type: OperationType::Generic, value: v2.wrapping_div(v1) as u64})
+                        let v2 = try!(x.signed_integer(addr_mask));
+                        Ok(TypedValue{value_type: self.value_type,
+                                      value: v2.wrapping_div(v1) as u64})
                     }
                 }
             }
@@ -973,13 +1043,9 @@ impl TypedValue {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.value & addr_mask;
-                    let v2 = x.value & addr_mask;
-                    Ok(TypedValue{value_type: OperationType::Generic, value: v2.wrapping_sub(v1)})
-                }
-            }
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            Ok(TypedValue{value_type: self.value_type, value: v2.wrapping_sub(v1)})
         }
     }
 
@@ -987,16 +1053,12 @@ impl TypedValue {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.value & addr_mask;
-                    let v2 = x.value & addr_mask;
-                    if v1 == 0 {
-                        Err(Error::DivisionByZero.into())
-                    } else {
-                        Ok(TypedValue{value_type: OperationType::Generic, value: v2.wrapping_rem(v1)})
-                    }
-                }
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            if v1 == 0 {
+                Err(Error::DivisionByZero.into())
+            } else {
+                Ok(TypedValue{value_type: self.value_type, value: v2.wrapping_rem(v1)})
             }
         }
     }
@@ -1005,27 +1067,19 @@ impl TypedValue {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.value & addr_mask;
-                    let v2 = x.value & addr_mask;
-                    if v1 == 0 {
-                        Err(Error::DivisionByZero.into())
-                    } else {
-                        Ok(TypedValue{value_type: OperationType::Generic, value: v2.wrapping_mul(v1)})
-                    }
-                }
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            if v1 == 0 {
+                Err(Error::DivisionByZero.into())
+            } else {
+                Ok(TypedValue{value_type: self.value_type, value: v2.wrapping_mul(v1)})
             }
         }
     }
 
     fn neg(&self, addr_mask: u64) -> Result<TypedValue, Error> {
-        match self.value_type {
-            OperationType::Generic => {
-                let v = self.value & addr_mask;
-                Ok(TypedValue{value_type: OperationType::Generic, value: v.wrapping_neg()})
-            }
-        }
+        let v = try!(self.unsigned_integer(addr_mask));
+        Ok(TypedValue{value_type: self.value_type, value: v.wrapping_neg()})
     }
 
     fn not(&self, addr_mask: u64) -> Result<TypedValue, Error> {
@@ -1047,13 +1101,9 @@ impl TypedValue {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.value & addr_mask;
-                    let v2 = x.value & addr_mask;
-                    Ok(TypedValue{value_type: OperationType::Generic, value: v1.wrapping_add(v2)})
-                }
-            }
+            let v1 = try!(self.unsigned_integer(addr_mask));
+            let v2 = try!(x.unsigned_integer(addr_mask));
+            Ok(TypedValue{value_type: self.value_type, value: v1.wrapping_add(v2)})
         }
     }
 
@@ -1091,12 +1141,12 @@ impl TypedValue {
         }
     }
 
-    fn shra(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn shra(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
             let v1 = try!(self.unsigned_integer(addr_mask));
-            let v2 = try!(x.signed_integer(address_size, addr_mask));
+            let v2 = try!(x.signed_integer(addr_mask));
             // Because wrapping_shr takes a u32, not a u64, we do the
             // check by hand.
             let result = if v1 >= 64 {
@@ -1122,87 +1172,63 @@ impl TypedValue {
         }
     }
 
-    fn eq(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn eq(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.signed(address_size, addr_mask);
-                    let v2 = x.signed(address_size, addr_mask);
-                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 == v1 { 1 } else { 0 }})
-                }
-            }
+            let v1 = try!(self.signed_integer(addr_mask));
+            let v2 = try!(x.signed_integer(addr_mask));
+            Ok(TypedValue{value_type: OperationType::Generic, value: if v2 == v1 { 1 } else { 0 }})
         }
     }
 
-    fn ge(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn ge(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.signed(address_size, addr_mask);
-                    let v2 = x.signed(address_size, addr_mask);
-                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 >= v1 { 1 } else { 0 }})
-                }
-            }
+            let v1 = try!(self.signed_integer(addr_mask));
+            let v2 = try!(x.signed_integer(addr_mask));
+            Ok(TypedValue{value_type: OperationType::Generic, value: if v2 >= v1 { 1 } else { 0 }})
         }
     }
 
-    fn gt(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn gt(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.signed(address_size, addr_mask);
-                    let v2 = x.signed(address_size, addr_mask);
-                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 > v1 { 1 } else { 0 }})
-                }
-            }
+            let v1 = try!(self.signed_integer(addr_mask));
+            let v2 = try!(x.signed_integer(addr_mask));
+            Ok(TypedValue{value_type: OperationType::Generic, value: if v2 > v1 { 1 } else { 0 }})
         }
     }
 
-    fn le(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn le(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.signed(address_size, addr_mask);
-                    let v2 = x.signed(address_size, addr_mask);
-                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 <= v1 { 1 } else { 0 }})
-                }
-            }
+            let v1 = try!(self.signed_integer(addr_mask));
+            let v2 = try!(x.signed_integer(addr_mask));
+            Ok(TypedValue{value_type: OperationType::Generic, value: if v2 <= v1 { 1 } else { 0 }})
         }
     }
 
-    fn lt(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn lt(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.signed(address_size, addr_mask);
-                    let v2 = x.signed(address_size, addr_mask);
-                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 < v1 { 1 } else { 0 }})
-                }
-            }
+            let v1 = try!(self.signed_integer(addr_mask));
+            let v2 = try!(x.signed_integer(addr_mask));
+            Ok(TypedValue{value_type: OperationType::Generic, value: if v2 < v1 { 1 } else { 0 }})
         }
     }
 
-    fn ne(&self, x: TypedValue, address_size: u8, addr_mask: u64) -> Result<TypedValue, Error> {
+    fn ne(&self, x: TypedValue, addr_mask: u64) -> Result<TypedValue, Error> {
         if self.value_type != x.value_type {
             Err(Error::TypeMismatch)
         } else {
-            match self.value_type {
-                OperationType::Generic => {
-                    let v1 = self.signed(address_size, addr_mask);
-                    let v2 = x.signed(address_size, addr_mask);
-                    Ok(TypedValue{value_type: OperationType::Generic, value: if v2 != v1 { 1 } else { 0 }})
-                }
-            }
+            let v1 = try!(self.signed_integer(addr_mask));
+            let v2 = try!(x.signed_integer(addr_mask));
+            Ok(TypedValue{value_type: OperationType::Generic, value: if v2 != v1 { 1 } else { 0 }})
         }
     }
 }
@@ -1423,7 +1449,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
 
             Operation::Abs => {
                 let value = try!(self.pop());
-                let result = try!(value.abs(self.address_size, self.addr_mask));
+                let result = try!(value.abs(self.addr_mask));
                 self.push(result);
             }
             Operation::And => {
@@ -1435,7 +1461,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
             Operation::Div => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                let result = try!(v1.div(v2, self.address_size, self.addr_mask));
+                let result = try!(v1.div(v2, self.addr_mask));
                 self.push(result);
             }
             Operation::Minus => {
@@ -1500,7 +1526,7 @@ impl<'input, Endian> Evaluation<'input, Endian>
             Operation::Shra => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                let result = try!(v1.shra(v2, self.address_size, self.addr_mask));
+                let result = try!(v1.shra(v2, self.addr_mask));
                 self.push(result);
             }
             Operation::Xor => {
@@ -1523,37 +1549,37 @@ impl<'input, Endian> Evaluation<'input, Endian>
             Operation::Eq => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                let result = try!(v1.eq(v2, self.address_size, self.addr_mask));
+                let result = try!(v1.eq(v2, self.addr_mask));
                 self.push(result);
             }
             Operation::Ge => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                let result = try!(v1.ge(v2, self.address_size, self.addr_mask));
+                let result = try!(v1.ge(v2, self.addr_mask));
                 self.push(result);
             }
             Operation::Gt => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                let result = try!(v1.gt(v2, self.address_size, self.addr_mask));
+                let result = try!(v1.gt(v2, self.addr_mask));
                 self.push(result);
             }
             Operation::Le => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                let result = try!(v1.le(v2, self.address_size, self.addr_mask));
+                let result = try!(v1.le(v2, self.addr_mask));
                 self.push(result);
             }
             Operation::Lt => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                let result = try!(v1.lt(v2, self.address_size, self.addr_mask));
+                let result = try!(v1.lt(v2, self.addr_mask));
                 self.push(result);
             }
             Operation::Ne => {
                 let v1 = try!(self.pop());
                 let v2 = try!(self.pop());
-                let result = try!(v1.ne(v2, self.address_size, self.addr_mask));
+                let result = try!(v1.ne(v2, self.addr_mask));
                 self.push(result);
             }
 
